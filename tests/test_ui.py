@@ -107,3 +107,22 @@ def test_category_dialog(window):
 
     window.delete_category(dlg.category_id)
     assert all(c.name != "Huisdieren" for c in archive.categories())
+
+
+def test_folder_choice_and_move(window, tmp_path):
+    used = tmp_path / "gebruikt"
+    used.mkdir()
+    (used / "foto.jpg").write_text("x")
+    assert dialogs.resolve_archive_folder(used) == used / "Mijn Archief"
+    assert dialogs.resolve_archive_folder(tmp_path / "nieuw") == tmp_path / "nieuw"
+
+    welcome = dialogs.WelcomeDialog(tmp_path / "start")
+    welcome.field.edit.setText(str(used))
+    welcome._accept()
+    assert welcome.folder == used / "Mijn Archief"
+
+    move = dialogs.MoveDialog(window.archive.root, window)
+    assert move.field.path() == dialogs.Path(dialogs.NETWORK_EXAMPLE)
+    move.field.edit.setText("")
+    move._accept()
+    assert not move.error.isHidden()

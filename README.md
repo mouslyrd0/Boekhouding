@@ -49,6 +49,12 @@ Wil je niets installeren? Gebruik dan `MijnArchief-zonder-installatie.zip`, pak 
    staat **Mijn Archief** met een eigen pictogram op je bureaublad en in het Startmenu, en werkt alles
    offline.
 
+## Archief op een Raspberry Pi
+
+Je kunt je archief ook op een Raspberry Pi in je thuisnetwerk bewaren. Het programma draait dan op je pc,
+maar de documenten staan op de Pi. Een installatiescript en de stappen staan in
+[raspberry/LEESMIJ.md](raspberry/LEESMIJ.md).
+
 ## Eerste keer starten
 
 Het programma vraagt waar je archief moet komen. Standaard is dat `Documenten\Mijn Archief`. Je kunt ook

@@ -10,7 +10,7 @@ from pathlib import Path
 from PySide6.QtCore import QSize, Qt, QTimer, QUrl
 from PySide6.QtGui import QAction, QDesktopServices, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
-    QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow,
+    QApplication, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow,
     QMenu, QPushButton, QScrollArea, QSplitter, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
@@ -21,7 +21,7 @@ from ..archive import (
 from ..extract import find_tesseract
 from ..formatting import format_amount, format_date_long, warranty_status
 from . import style
-from .dialogs import AboutBox, CategoryDialog, DocumentDialog, ask, inform
+from .dialogs import AboutBox, CategoryDialog, DocumentDialog, MoveDialog, ask, inform
 from .icon import app_icon
 from .widgets import (
     ROLE_COLOR, ROLE_COUNT, ROLE_DOC, ROLE_KEY, DocumentDelegate, SidebarDelegate, StatusBadge, render_preview,
@@ -226,10 +226,11 @@ def escape(text: str) -> str:
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, archive: Archive, change_folder=None):
+    def __init__(self, archive: Archive, change_folder=None, switch_to=None):
         super().__init__()
         self.archive = archive
         self.change_folder_cb = change_folder
+        self.switch_to_cb = switch_to
         self.filter_key: tuple = ("all", None)
         self.docs: list[Document] = []
         self.setWindowTitle(APP_NAME)
@@ -340,6 +341,8 @@ class MainWindow(QMainWindow):
         self._action(m, "Archiefmap openen in Verkenner", self.open_archive_folder)
         if self.change_folder_cb:
             self._action(m, "Ander archief openen…", self.change_folder_cb)
+        if self.switch_to_cb:
+            self._action(m, "Archief verhuizen (bijv. naar Raspberry Pi)…", self.move_archive)
         m.addSeparator()
         self._action(m, "Afsluiten", self.close, "Ctrl+Q")
 
@@ -637,6 +640,29 @@ class MainWindow(QMainWindow):
 
     def open_archive_folder(self) -> None:
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.archive.root)))
+
+    def move_archive(self) -> None:
+        dlg = MoveDialog(self.archive.root, self)
+        while dlg.exec():
+            self.setCursor(Qt.WaitCursor)
+            self.statusBar().showMessage("Bezig met kopiëren… dit kan even duren.")
+            QApplication.processEvents()
+            try:
+                n = self.archive.copy_to(dlg.folder)
+            except ArchiveError as exc:
+                self.unsetCursor()
+                self.statusBar().clearMessage()
+                dlg.show_error(str(exc))
+                continue
+            self.unsetCursor()
+            self.statusBar().clearMessage()
+            old = self.archive.root
+            if self.switch_to_cb(dlg.folder):
+                inform(None, "Archief verhuisd",
+                       f"{n} {'document is' if n == 1 else 'documenten zijn'} gekopieerd naar:\n{dlg.folder}\n\n"
+                       f"Mijn Archief werkt vanaf nu met deze map. Je oude archief staat nog op:\n{old}\n"
+                       f"Als alles goed werkt, kun je die map later zelf verwijderen.")
+            return
 
     def make_backup(self) -> None:
         name = f"Mijn Archief back-up {date.today().isoformat()}.zip"

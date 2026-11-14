@@ -220,3 +220,54 @@ def test_program_never_uses_network():
                 names = [node.module] + [f"{node.module}.{a.name}" for a in node.names]
             for name in names:
                 assert name.split(".")[0] not in forbidden and name not in forbidden, f"{py.name}: {name}"
+
+
+def test_lock_other_computer(archive, monkeypatch):
+    import json
+    assert archive.lock_owner() is None
+    archive.acquire_lock()
+    assert archive.lock_owner() is None, "eigen computer telt niet als 'in gebruik'"
+    (archive.root / "in-gebruik.json").write_text(json.dumps({"computer": "LAPTOP-WOONKAMER", "pid": 1}))
+    assert archive.lock_owner()["computer"] == "LAPTOP-WOONKAMER"
+    archive.release_lock()  # niet van ons: blijft staan
+    assert (archive.root / "in-gebruik.json").exists()
+
+
+def test_lock_released_on_close(tmp_path):
+    a = Archive(tmp_path / "A")
+    a.acquire_lock()
+    assert (tmp_path / "A" / "in-gebruik.json").exists()
+    a.close()
+    assert not (tmp_path / "A" / "in-gebruik.json").exists()
+
+
+def test_journal_mode_works_on_network_shares(archive):
+    assert archive.conn.execute("PRAGMA journal_mode").fetchone()[0] == "delete"
+
+
+def test_copy_to_new_location(archive, src, tmp_path):
+    huis = archive.add_category("Huis")
+    doc = archive.add_document(src(), "Jaarafrekening", huis, "2026-10-14", description="Eneco")
+    gone = archive.add_document(src(), "Weg", None, "2026-01-01")
+    archive.delete_document(gone.id)
+    dest = tmp_path / "raspberry" / "MijnArchief"
+    assert archive.copy_to(dest) == 1
+    assert archive.file_of(doc).exists(), "het origineel blijft staan"
+    copy = Archive(dest)
+    assert [d.title for d in copy.search("eneco")] == ["Jaarafrekening"]
+    assert copy.file_of(copy.document(doc.id)).exists()
+    assert any((dest / "prullenbak").iterdir())
+    assert copy.category_path(copy.document(doc.id).category_id) == "Huis"
+    copy.close()
+
+
+def test_copy_to_refuses_bad_targets(archive, tmp_path):
+    full = tmp_path / "vol"
+    full.mkdir()
+    (full / "iets.txt").write_text("x")
+    with pytest.raises(ArchiveError):
+        archive.copy_to(full)
+    with pytest.raises(ArchiveError):
+        archive.copy_to(archive.root)
+    with pytest.raises(ArchiveError):
+        archive.copy_to(archive.root / "binnenin")

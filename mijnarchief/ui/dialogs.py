@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import sqlite3
 from pathlib import Path
 
 from PySide6.QtCore import QDate, Qt
@@ -17,6 +18,9 @@ from ..formatting import format_amount_plain, parse_amount
 FILE_FILTER = ("Documenten (*.pdf *.jpg *.jpeg *.png *.heic *.tif *.tiff *.bmp *.gif *.webp *.txt "
                "*.doc *.docx *.xls *.xlsx *.odt *.eml *.msg);;Alle bestanden (*)")
 DATE_FORMAT = "d MMMM yyyy"
+NETWORK_EXAMPLE = r"\\raspberrypi\MijnArchief"
+UNREACHABLE = ("Het archief is niet bereikbaar. Staat het archief op je Raspberry Pi of een andere schijf? "
+               "Controleer of die aanstaat en verbonden is, en probeer het opnieuw.")
 
 
 # ----------------------------------------------------------------- meldingen
@@ -348,56 +352,156 @@ class DocumentDialog(QDialog):
             QApplication.restoreOverrideCursor()
             self._show_error(str(exc))
             return
+        except (sqlite3.Error, OSError):
+            QApplication.restoreOverrideCursor()
+            self._show_error(UNREACHABLE)
+            return
         QApplication.restoreOverrideCursor()
         self.accept()
 
 
 # ------------------------------------------------------------ eerste start
-class WelcomeDialog(QDialog):
-    """Bij de eerste start: kies waar het archief komt."""
+def resolve_archive_folder(chosen: Path) -> Path:
+    """Een lege map of bestaande archiefmap gebruiken we direct; staat er al iets
+    anders in, dan maken we er de submap 'Mijn Archief' in."""
+    try:
+        if chosen.exists() and not (chosen / "archief.db").exists() and any(chosen.iterdir()):
+            return chosen / "Mijn Archief"
+    except OSError:
+        pass
+    return chosen
 
-    def __init__(self, default_dir: Path, parent=None, message: str | None = None):
+
+class FolderField(QHBoxLayout):
+    """Invoerveld voor een map, met knop 'Bladeren…'. Je kunt ook een
+    netwerkadres typen, zoals NETWORK_EXAMPLE."""
+
+    def __init__(self, dialog: QDialog, start: Path | None, title: str):
+        super().__init__()
+        self.dialog = dialog
+        self.title = title
+        self.edit = QLineEdit(str(start) if start else "")
+        self.edit.setPlaceholderText(f"bijv. {NETWORK_EXAMPLE}")
+        browse = QPushButton("Bladeren…")
+        browse.clicked.connect(self._browse)
+        self.addWidget(self.edit, 1)
+        self.addWidget(browse)
+
+    def _browse(self) -> None:
+        current = self.path()
+        start = str(current.parent if current else Path.home())
+        path = QFileDialog.getExistingDirectory(self.dialog, self.title, start)
+        if path:
+            self.edit.setText(str(resolve_archive_folder(Path(path))))
+
+    def path(self) -> Path | None:
+        text = self.edit.text().strip().strip('"')
+        return Path(text) if text else None
+
+
+class WelcomeDialog(QDialog):
+    """Bij de eerste start (of via 'Ander archief openen'): kies waar het archief staat."""
+
+    def __init__(self, default_dir: Path, parent=None, message: str | None = None,
+                 ok_text: str = "Starten"):
         super().__init__(parent)
         self.setWindowTitle("Welkom bij Mijn Archief")
-        self.setMinimumWidth(520)
+        self.setMinimumWidth(560)
         self.folder = default_dir
         lay = QVBoxLayout(self)
         lay.setContentsMargins(26, 24, 26, 20)
         lay.setSpacing(10)
         lay.addWidget(_label("Welkom bij Mijn Archief", "dialogTitle"))
         intro = QLabel(message or (
-            "Hier bewaar je bonnetjes, garantiebewijzen, facturen en brieven. Alles blijft op deze computer: "
-            "het programma maakt nooit verbinding met internet.<br><br>"
-            "Kies de map waarin je archief komt. Je kunt die map later in zijn geheel kopiëren naar een "
-            "USB-stick als back-up."))
+            "Hier bewaar je bonnetjes, garantiebewijzen, facturen en brieven. Het programma maakt nooit "
+            "verbinding met internet.<br><br>"
+            "Kies de map waarin je archief komt. Dat kan een map op deze computer zijn, of een gedeelde map "
+            "op je Raspberry Pi in je eigen thuisnetwerk."))
         intro.setWordWrap(True)
         intro.setTextFormat(Qt.RichText)
         lay.addWidget(intro)
         lay.addSpacing(4)
         lay.addWidget(_label("Archiefmap"))
-        row = QHBoxLayout()
-        self.path_edit = QLineEdit(str(default_dir))
-        self.path_edit.setReadOnly(True)
-        row.addWidget(self.path_edit, 1)
-        change = QPushButton("Wijzigen…")
-        change.clicked.connect(self._choose)
-        row.addWidget(change)
-        lay.addLayout(row)
-        lay.addWidget(_label("Kies je een bestaande archiefmap, dan wordt die gewoon geopend.", "hint"))
+        self.field = FolderField(self, default_dir, "Archiefmap kiezen")
+        lay.addLayout(self.field)
+        lay.addWidget(_label(f"Archief op je Raspberry Pi? Typ het netwerkadres, bijvoorbeeld "
+                             f"{NETWORK_EXAMPLE}. Kies je een bestaande archiefmap, dan wordt die gewoon "
+                             f"geopend.", "hint"))
+        self.error = _label("", "error")
+        self.error.setWordWrap(True)
+        self.error.hide()
+        lay.addWidget(self.error)
         lay.addSpacing(8)
-        buttons, ok = _buttons("Starten", self)
-        ok.clicked.connect(self.accept)
+        buttons, ok = _buttons(ok_text, self)
+        ok.clicked.connect(self._accept)
         lay.addLayout(buttons)
 
-    def _choose(self) -> None:
-        path = QFileDialog.getExistingDirectory(self, "Archiefmap kiezen", str(self.folder.parent))
-        if path:
-            chosen = Path(path)
-            # Een lege of bestaande archiefmap gebruiken we direct; anders maken we er een submap in.
-            if not (chosen / "archief.db").exists() and any(chosen.iterdir()):
-                chosen = chosen / "Mijn Archief"
-            self.folder = chosen
-            self.path_edit.setText(str(chosen))
+    def _accept(self) -> None:
+        path = self.field.path()
+        if not path:
+            self.error.setText("Kies of typ eerst een map.")
+            self.error.show()
+            return
+        if str(path).startswith("\\\\") and not path.exists():
+            self.error.setText(
+                f"Het netwerkadres {path} is niet bereikbaar. Staat de Raspberry Pi aan? Open het adres "
+                f"eerst één keer in de Verkenner en log in met je Raspberry Pi-gebruikersnaam en "
+                f"-wachtwoord (vink ‘Referenties onthouden’ aan).")
+            self.error.show()
+            return
+        self.folder = resolve_archive_folder(path)
+        self.accept()
+
+
+class MoveDialog(QDialog):
+    """Het hele archief kopiëren naar een andere map, zoals de Raspberry Pi."""
+
+    def __init__(self, current: Path, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Archief verhuizen")
+        self.setMinimumWidth(560)
+        self.folder: Path | None = None
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(26, 24, 26, 20)
+        lay.setSpacing(10)
+        lay.addWidget(_label("Archief verhuizen", "dialogTitle"))
+        intro = QLabel(
+            "Alle documenten, categorieën en omschrijvingen worden gekopieerd naar een nieuwe map, "
+            "bijvoorbeeld de gedeelde map op je Raspberry Pi. Daarna werkt het programma met de nieuwe map."
+            f"<br><br>Je huidige archief blijft staan op:<br><span style='color:#5d6878'>{current}</span><br>"
+            "Als alles goed werkt, kun je die map later zelf verwijderen.")
+        intro.setWordWrap(True)
+        intro.setTextFormat(Qt.RichText)
+        lay.addWidget(intro)
+        lay.addWidget(_label("Nieuwe archiefmap"))
+        self.field = FolderField(self, None, "Nieuwe archiefmap kiezen")
+        self.field.edit.setText(NETWORK_EXAMPLE)
+        lay.addLayout(self.field)
+        lay.addWidget(_label("Kies een lege map. Op de Raspberry Pi is dat meestal "
+                             f"{NETWORK_EXAMPLE}.", "hint"))
+        self.error = _label("", "error")
+        self.error.setWordWrap(True)
+        self.error.hide()
+        lay.addWidget(self.error)
+        buttons, ok = _buttons("Kopiëren en overstappen", self)
+        ok.clicked.connect(self._accept)
+        lay.addLayout(buttons)
+
+    def show_error(self, text: str) -> None:
+        self.error.setText(text)
+        self.error.show()
+
+    def _accept(self) -> None:
+        path = self.field.path()
+        if not path:
+            self.show_error("Kies of typ eerst een map.")
+            return
+        if str(path).startswith("\\\\") and not path.exists():
+            self.show_error(f"Het netwerkadres {path} is niet bereikbaar. Staat de Raspberry Pi aan? Open het "
+                            f"adres eerst één keer in de Verkenner en log in.")
+            return
+        self.folder = path
+        self.accept()
 
 
 class AboutBox(QDialog):

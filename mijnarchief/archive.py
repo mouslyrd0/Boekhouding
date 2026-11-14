@@ -15,6 +15,9 @@ zonder dit programma leesbaar.
 
 from __future__ import annotations
 
+import json
+import os
+import platform
 import re
 import shutil
 import sqlite3
@@ -32,6 +35,7 @@ SCHEMA_VERSION = 1
 DB_NAME = "archief.db"
 DOCS_DIR = "documenten"
 TRASH_DIR = "prullenbak"
+LOCK_NAME = "in-gebruik.json"
 
 CATEGORY_COLORS = ["#2b4c7e", "#2f7a4f", "#a8620a", "#7b3f8c", "#1f7a85", "#b23b3b", "#59606b", "#8a6d1f"]
 
@@ -131,9 +135,14 @@ class Archive:
         self.root.mkdir(parents=True, exist_ok=True)
         (self.root / DOCS_DIR).mkdir(exist_ok=True)
         self.db_path = self.root / DB_NAME
-        self.conn = sqlite3.connect(str(self.db_path))
+        self._has_lock = False
+        self.conn = sqlite3.connect(str(self.db_path), timeout=15)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys = ON")
+        # Klassiek journaal (geen WAL): dat werkt ook betrouwbaar op een netwerkmap,
+        # zoals een gedeelde map op een Raspberry Pi.
+        self.conn.execute("PRAGMA journal_mode = DELETE")
+        self.conn.execute("PRAGMA synchronous = FULL")
         self._migrate()
 
     # ------------------------------------------------------------------ setup
@@ -184,7 +193,85 @@ class Archive:
             self.conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
     def close(self) -> None:
-        self.conn.close()
+        self.release_lock()
+        try:
+            self.conn.close()
+        except sqlite3.Error:
+            pass
+
+    # ------------------------------------------------------------ in gebruik
+    # Staat het archief op een netwerkmap (bijv. een Raspberry Pi), dan mag het
+    # maar op één computer tegelijk open zijn. Een klein bestand in de
+    # archiefmap houdt bij welke computer het archief gebruikt.
+    @staticmethod
+    def _me() -> dict:
+        return {"computer": platform.node() or "onbekend", "pid": os.getpid()}
+
+    def lock_owner(self) -> dict | None:
+        """Geeft de andere computer terug die het archief open heeft, of None."""
+        try:
+            data = json.loads((self.root / LOCK_NAME).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        if not isinstance(data, dict):
+            return None
+        if str(data.get("computer", "")).lower() == self._me()["computer"].lower():
+            return None  # deze computer zelf (bijv. na een vastloper)
+        return data
+
+    def acquire_lock(self) -> None:
+        data = self._me() | {"sinds": _now()}
+        try:
+            (self.root / LOCK_NAME).write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            self._has_lock = True
+        except OSError:
+            pass
+
+    def release_lock(self) -> None:
+        if not self._has_lock:
+            return
+        self._has_lock = False
+        path = self.root / LOCK_NAME
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if data.get("computer") == self._me()["computer"] and data.get("pid") == self._me()["pid"]:
+                path.unlink()
+        except (OSError, ValueError, AttributeError):
+            pass
+
+    # ------------------------------------------------------------ verhuizen
+    def copy_to(self, dest: Path) -> int:
+        """Kopieert het hele archief naar een andere map (bijv. de Raspberry Pi).
+
+        De doelmap moet leeg zijn of nog niet bestaan. Het huidige archief blijft
+        onaangeroerd. Geeft het aantal gekopieerde documenten terug."""
+        dest = Path(dest)
+        if dest.exists() and dest.resolve() == self.root.resolve():
+            raise ArchiveError("Kies een andere map dan de huidige archiefmap.")
+        if self.root.resolve() in dest.resolve().parents:
+            raise ArchiveError("De nieuwe map mag niet binnen de huidige archiefmap liggen.")
+        try:
+            if dest.exists() and any(dest.iterdir()):
+                raise ArchiveError("De gekozen map is niet leeg. Kies een lege map, of maak er een nieuwe map in.")
+            dest.mkdir(parents=True, exist_ok=True)
+            target = sqlite3.connect(str(dest / DB_NAME))
+            try:
+                self.conn.backup(target)
+            finally:
+                target.close()
+            for sub in (DOCS_DIR, TRASH_DIR):
+                if (self.root / sub).exists():
+                    shutil.copytree(self.root / sub, dest / sub, dirs_exist_ok=True)
+            docs = self.all_documents()
+            missing = [d.file_path for d in docs
+                       if self.file_of(d).exists() and not (dest / Path(d.file_path)).exists()]
+        except ArchiveError:
+            raise
+        except (OSError, sqlite3.Error) as exc:
+            raise ArchiveError(f"Kopiëren naar de nieuwe map is mislukt: {exc}") from exc
+        if missing:
+            raise ArchiveError(f"{len(missing)} bestand(en) zijn niet goed gekopieerd. Probeer het opnieuw.")
+        return len(docs)
 
     # ------------------------------------------------------------- categories
     @staticmethod
