@@ -52,7 +52,7 @@ Wil je niets installeren? Gebruik dan `MijnArchief-zonder-installatie.zip`, pak 
 ## Archief op een Raspberry Pi
 
 Je kunt je archief ook op een Raspberry Pi in je thuisnetwerk bewaren. Het programma draait dan op je pc,
-maar de documenten staan op de Pi. Een installatiescript en de stappen staan in
+maar de documenten staan op de Pi. Dubbelklik op **Raspberry Pi instellen** om alles vanaf je pc op de Pi te installeren. De stappen staan in
 [raspberry/LEESMIJ.md](raspberry/LEESMIJ.md).
 
 ## Eerste keer starten

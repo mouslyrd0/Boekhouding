@@ -15,35 +15,40 @@ Windows-pc draaien, maar alle documenten en de database staan op de Pi.
 - Bij voorkeur een USB-SSD of USB-stick voor de opslag (geheugenkaartjes slijten sneller)
 - Toegang tot de Pi: met een toetsenbord en scherm, of via SSH vanaf je pc
 
-## Stap 1: op de Raspberry Pi
+## Stap 1: de Pi klaarmaken (alleen als die nog niet draait)
 
-1. Kopieer de map `raspberry` naar de Pi, bijvoorbeeld met een USB-stick.
-2. Open een terminal op de Pi, ga naar die map en voer uit:
+1. Installeer op je pc **Raspberry Pi Imager** via https://www.raspberrypi.com/software/
+2. Stop de geheugenkaart van de Pi in je pc en start Raspberry Pi Imager.
+3. Kies je Pi-model en bij het besturingssysteem **Raspberry Pi OS Lite (64-bit)**
+   (te vinden onder *Raspberry Pi OS (other)*). Kies daarna de geheugenkaart.
+4. Klik op **Volgende** en dan op **Instellingen bewerken**:
+   - Hostnaam: `raspberrypi`
+   - Kies een gebruikersnaam en wachtwoord en schrijf ze op
+   - Vul je wifi-naam en -wachtwoord in (niet nodig met een netwerkkabel)
+   - Tabblad *Services*: vink **SSH inschakelen** aan, met *wachtwoord-authenticatie*
+5. Klik op **Opslaan** en **Ja** en wacht tot het schrijven klaar is.
+6. Stop de kaart in de Pi, sluit eventueel de netwerkkabel aan en zet de Pi aan. Wacht 3 minuten.
 
-   ```
-   sudo bash installeer-op-raspberry.sh
-   ```
+Draait je Pi al? Zet SSH dan aan op de Pi zelf: `sudo raspi-config` > *Interface Options* > *SSH* > *Ja*.
 
-   Wil je het archief op een USB-schijf die vast gekoppeld is op `/mnt/ssd`? Gebruik dan:
+## Stap 2: alles vanaf je pc op de Pi installeren
 
-   ```
-   sudo bash installeer-op-raspberry.sh /mnt/ssd/mijnarchief
-   ```
+1. Dubbelklik in de map *Mijn Archief* op **Raspberry Pi instellen**.
+2. Beantwoord de vragen:
+   - Naam van de Pi: druk op Enter voor `raspberrypi.local`, of typ het IP-adres van de Pi
+   - Gebruikersnaam: de naam die je in stap 1 koos
+   - Map op de Pi: druk op Enter
+3. Typ twee keer het wachtwoord van je Pi als daarom gevraagd wordt. Je ziet tijdens het typen geen tekens;
+   dat is normaal.
+4. Kies daarna een wachtwoord voor de gedeelde map en typ het twee keer.
+5. Aan het eind opent de Verkenner de gedeelde map. Log in met je Pi-gebruikersnaam en het wachtwoord
+   voor de gedeelde map, en vink **Mijn referenties onthouden** aan.
 
-3. Kies een wachtwoord als daarom gevraagd wordt.
-4. Aan het eind zie je het **netwerkadres**, bijvoorbeeld `\\raspberrypi\MijnArchief`. Schrijf dat op,
-   samen met de gebruikersnaam.
+Lukt het niet met `raspberrypi.local`? Gebruik dan het IP-adres van de Pi, bijvoorbeeld `192.168.1.50`. Dat
+vind je in de app of op de webpagina van je router. Geef de Pi daar bij voorkeur een vast IP-adres.
 
-## Stap 2: op je Windows-pc, eenmalig inloggen
-
-1. Open de **Verkenner** (Windows-toets + E).
-2. Klik bovenin op de adresbalk, typ het netwerkadres, bijvoorbeeld `\\raspberrypi\MijnArchief`, en druk op
-   Enter.
-3. Vul de gebruikersnaam en het wachtwoord van stap 1 in en vink **Mijn referenties onthouden** aan.
-4. Je ziet nu de (nog lege) map. Je kunt de Verkenner sluiten.
-
-Werkt `\\raspberrypi\MijnArchief` niet? Gebruik dan het IP-adres dat het script liet zien, bijvoorbeeld
-`\\192.168.1.50\MijnArchief`. Geef de Pi in je router bij voorkeur een vast IP-adres.
+Liever direct op de Pi werken? Kopieer de map `raspberry` naar de Pi en voer daar uit:
+`sudo bash installeer-op-raspberry.sh`
 
 ## Stap 3: in Mijn Archief
 
@@ -54,7 +59,7 @@ Werkt `\\raspberrypi\MijnArchief` niet? Gebruik dan het IP-adres dat het script 
 3. Alles wordt gekopieerd. Daarna werkt het programma met de Pi. Je oude archief op de pc blijft voor de
    zekerheid staan; die map kun je later zelf verwijderen.
 
-**Begin je net?** Typ bij de eerste start het netwerkadres in het veld **Archiefmap** en klik op
+**Begin je net?** Typ bij de eerste start het netwerkadres (bijv. `\\raspberrypi.local\MijnArchief`) in het veld **Archiefmap** en klik op
 **Starten**. Een bestaand archief op de Pi open je via **Bestand › Ander archief openen…**
 
 ## Als de Pi uit staat
