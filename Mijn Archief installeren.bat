@@ -1,14 +1,13 @@
 @echo off
 setlocal
-title Mijn Archief
-rem Start Mijn Archief vanuit de broncode.
+title Mijn Archief installeren
+rem Zet Mijn Archief klaar en maakt een snelkoppeling "Mijn Archief" op het
+rem bureaublad en in het Startmenu. Dit hoeft maar een keer.
 rem Eenmalig nodig: Python 3.10 of nieuwer van https://www.python.org
-rem De eerste keer worden de onderdelen gedownload; daarna werkt alles offline.
 
 cd /d "%~dp0"
 
-rem Al eerder geinstalleerd? Dan direct starten.
-if exist ".venv\Scripts\pythonw.exe" goto starten
+if exist ".venv\Scripts\pythonw.exe" goto snelkoppeling
 
 rem Python zoeken: eerst de 'py'-starter van python.org, dan 'python'.
 set "PY="
@@ -22,30 +21,41 @@ if not defined PY (
     echo.
     echo  1. Ga naar https://www.python.org/downloads/ en klik op "Download Python".
     echo  2. Vink onderaan "Add python.exe to PATH" aan en klik op "Install Now".
-    echo  3. Dubbelklik daarna opnieuw op start-windows.bat.
+    echo  3. Dubbelklik daarna opnieuw op "Mijn Archief installeren".
     echo.
     pause
     exit /b 1
 )
 
 echo.
-echo  Eerste keer starten: Mijn Archief wordt klaargezet.
+echo  Mijn Archief wordt geinstalleerd.
 echo  Dit duurt een paar minuten en heeft eenmalig internet nodig.
 echo.
 %PY% -m venv .venv || goto fout
 ".venv\Scripts\python.exe" -m pip install --disable-pip-version-check -q --upgrade pip
 ".venv\Scripts\python.exe" -m pip install --disable-pip-version-check -r requirements.txt || goto fout
-echo.
-echo  Klaar. Vanaf nu start Mijn Archief direct en werkt het zonder internet.
 
-:starten
+:snelkoppeling
+powershell -NoProfile -ExecutionPolicy Bypass -File "packaging\snelkoppelingen.ps1" -AppDir "%CD%"
+if errorlevel 1 (
+    echo.
+    echo  Het programma is geinstalleerd, maar de snelkoppeling kon niet worden gemaakt.
+    echo  Je kunt Mijn Archief starten door opnieuw op dit bestand te dubbelklikken.
+    echo.
+    pause
+) else (
+    echo.
+    echo  Klaar. Je vindt "Mijn Archief" nu op je bureaublad en in het Startmenu.
+    echo  Vanaf nu werkt het programma zonder internet.
+    timeout /t 4 >nul
+)
 start "" ".venv\Scripts\pythonw.exe" main.py
 exit /b 0
 
 :fout
 echo.
-echo  Het klaarzetten is mislukt. Controleer of er internet is (alleen nodig bij de eerste keer)
-echo  en dubbelklik daarna opnieuw op start-windows.bat.
+echo  Het installeren is mislukt. Controleer of er internet is (alleen nodig bij de eerste keer)
+echo  en dubbelklik daarna opnieuw op "Mijn Archief installeren".
 if exist ".venv" rmdir /s /q ".venv"
 pause
 exit /b 1

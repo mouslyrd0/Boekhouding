@@ -50,8 +50,22 @@ def choose_archive(settings: Settings, message: str | None = None, start: Path |
             return archive
 
 
+def _windows_taskbar_identity() -> None:
+    """Zorgt dat Windows de taakbalk toont als 'Mijn Archief' met het eigen
+    pictogram, in plaats van als Python."""
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("MijnArchief.Programma")
+    except Exception:
+        pass
+
+
 def main(argv: list[str] | None = None) -> int:
     _setup_logging()
+    _windows_taskbar_identity()
     app = QApplication(argv if argv is not None else sys.argv)
     app.setApplicationName(APP_NAME)
     app.setOrganizationName("MijnArchief")

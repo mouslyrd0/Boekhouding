@@ -40,12 +40,14 @@ worden overzichtelijk en doorzoekbaar op je eigen computer bewaard.
 Wil je niets installeren? Gebruik dan `MijnArchief-zonder-installatie.zip`, pak het uit en start
 `MijnArchief.exe`.
 
-### Manier 2: vanuit de broncode
+### Manier 2: zonder installatieprogramma
 
 1. Installeer eenmalig [Python 3](https://www.python.org/downloads/) en vink daarbij
    *Add python.exe to PATH* aan.
-2. Dubbelklik op `start-windows.bat`. Alleen de eerste keer worden de onderdelen gedownload; daarna werkt
-   alles offline.
+2. Pak de map *Mijn Archief* uit op een vaste plek, bijvoorbeeld in Documenten.
+3. Dubbelklik op **Mijn Archief installeren**. De eerste keer worden de onderdelen gedownload. Daarna
+   staat **Mijn Archief** met een eigen pictogram op je bureaublad en in het Startmenu, en werkt alles
+   offline.
 
 ## Eerste keer starten
 
